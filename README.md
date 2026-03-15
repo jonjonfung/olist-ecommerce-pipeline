@@ -1,5 +1,8 @@
 # 🛒 Olist E-Commerce Data Pipeline
 
+## 🌐 Live Dashboard
+👉 [View Live Dashboard](your_streamlit_url_here)
+
 An end-to-end data engineering pipeline built on AWS using the Brazilian E-Commerce dataset from Kaggle.
 
 ## 🏗️ Architecture
