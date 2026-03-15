@@ -3,31 +3,10 @@ import pandas as pd
 import plotly.express as px
 import awswrangler as wr
 import os
-import streamlit as st
-import boto3
-import os
 
 # Load AWS credentials from Streamlit secrets
 os.environ["AWS_ACCESS_KEY_ID"] = st.secrets["AWS_ACCESS_KEY_ID"]
 os.environ["AWS_SECRET_ACCESS_KEY"] = st.secrets["AWS_SECRET_ACCESS_KEY"]
-os.environ["AWS_DEFAULT_REGION"] = "ap-southeast-2"
-```
-
-4. Commit changes
-
-## Step 2 — Deploy to Streamlit Cloud
-1. Go to **streamlit.io/cloud**
-2. Sign in with your **GitHub account**
-3. Click **"New app"**
-4. Select your repo **`olist-ecommerce-pipeline`**
-5. Set main file path to **`dashboard/dashboard.py`**
-6. Click **"Advanced settings"**
-7. Add your secrets:
-```
-AWS_ACCESS_KEY_ID = "your_access_key"
-AWS_SECRET_ACCESS_KEY = "your_secret_key"
-
-# AWS config
 os.environ["AWS_DEFAULT_REGION"] = "ap-southeast-2"
 
 st.set_page_config(
@@ -39,7 +18,6 @@ st.set_page_config(
 st.title("🛒 Olist E-Commerce Pipeline Dashboard")
 st.markdown("Built with AWS S3 + Glue + Athena + Streamlit")
 
-# Load data function
 @st.cache_data
 def load_data(query):
     return wr.athena.read_sql_query(
@@ -48,9 +26,8 @@ def load_data(query):
         s3_output="s3://olist-ecommerce-pipeline-john/output/"
     )
 
-# ---- ROW 1 - KPI METRICS ----
+# ---- KPI METRICS ----
 st.subheader("📊 Key Metrics")
-
 col1, col2, col3, col4 = st.columns(4)
 
 orders_df = load_data("SELECT COUNT(order_id) as total_orders FROM orders")
@@ -63,7 +40,7 @@ col2.metric("Total Revenue", f"R$ {revenue_df['total_revenue'][0]:,.2f}")
 col3.metric("Total Customers", f"{customers_df['total_customers'][0]:,}")
 col4.metric("Total Sellers", f"{sellers_df['total_sellers'][0]:,}")
 
-# ---- ROW 2 - MONTHLY REVENUE ----
+# ---- MONTHLY REVENUE ----
 st.subheader("📈 Monthly Revenue Trend")
 monthly_df = load_data("SELECT * FROM monthly_revenue ORDER BY year_month")
 fig1 = px.line(monthly_df, x="year_month", y="total_revenue",
@@ -71,7 +48,7 @@ fig1 = px.line(monthly_df, x="year_month", y="total_revenue",
                color_discrete_sequence=["#FF6B35"])
 st.plotly_chart(fig1, use_container_width=True)
 
-# ---- ROW 3 - TWO CHARTS SIDE BY SIDE ----
+# ---- TWO CHARTS SIDE BY SIDE ----
 col1, col2 = st.columns(2)
 
 with col1:
@@ -89,7 +66,7 @@ with col2:
                   color_discrete_sequence=px.colors.sequential.Oranges_r)
     st.plotly_chart(fig3, use_container_width=True)
 
-# ---- ROW 4 - DELIVERY TIME ----
+# ---- DELIVERY TIME ----
 st.subheader("🚚 Average Delivery Time by State")
 delivery_df = load_data("SELECT * FROM avg_delivery_time_by_state ORDER BY avg_delivery_days")
 fig4 = px.bar(delivery_df, x="customer_state", y="avg_delivery_days",
@@ -98,4 +75,4 @@ fig4 = px.bar(delivery_df, x="customer_state", y="avg_delivery_days",
 st.plotly_chart(fig4, use_container_width=True)
 
 st.markdown("---")
-st.markdown("Built by John | AWS S3 + Glue + Athena + Streamlit")
+st.markdown("Built by Jonathan Fung | AWS S3 + Glue + Athena + Streamlit")
