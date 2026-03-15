@@ -1,212 +1,78 @@
--- ============================================
--- OLIST E-COMMERCE PIPELINE - ATHENA QUERIES
--- ============================================
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import awswrangler as wr
+import os
 
--- CREATE SILVER DATABASE
-CREATE DATABASE IF NOT EXISTS olist_silver_db;
+# AWS config
+os.environ["AWS_DEFAULT_REGION"] = "ap-southeast-2"
 
--- ============================================
--- SILVER LAYER TABLES
--- ============================================
-
--- Orders
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.orders (
-  order_id string,
-  customer_id string,
-  order_status string,
-  order_purchase_timestamp string,
-  order_approved_at string,
-  order_delivered_carrier_date string,
-  order_delivered_customer_date string,
-  order_estimated_delivery_date string
+st.set_page_config(
+    page_title="Olist E-Commerce Dashboard",
+    page_icon="🛒",
+    layout="wide"
 )
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/orders/';
 
--- Customers
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.customers (
-  customer_id string,
-  customer_unique_id string,
-  customer_zip_code_prefix string,
-  customer_city string,
-  customer_state string
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/customers/';
+st.title("🛒 Olist E-Commerce Pipeline Dashboard")
+st.markdown("Built with AWS S3 + Glue + Athena + Streamlit")
 
--- Order Items
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.order_items (
-  order_id string,
-  order_item_id string,
-  product_id string,
-  seller_id string,
-  shipping_limit_date string,
-  price double,
-  freight_value double
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/order_items/';
+# Load data function
+@st.cache_data
+def load_data(query):
+    return wr.athena.read_sql_query(
+        query,
+        database="olist_silver_db",
+        s3_output="s3://olist-ecommerce-pipeline-john/output/"
+    )
 
--- Order Payments
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.order_payments (
-  order_id string,
-  payment_sequential string,
-  payment_type string,
-  payment_installments int,
-  payment_value double
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/order_payments/';
+# ---- ROW 1 - KPI METRICS ----
+st.subheader("📊 Key Metrics")
 
--- Order Reviews
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.order_reviews (
-  review_id string,
-  order_id string,
-  review_score int,
-  review_comment_title string,
-  review_comment_message string,
-  review_creation_date string,
-  review_answer_timestamp string
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/order_reviews/';
+col1, col2, col3, col4 = st.columns(4)
 
--- Products
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.products (
-  product_id string,
-  product_category_name string,
-  product_name_lenght string,
-  product_description_lenght string,
-  product_photos_qty string,
-  product_weight_g double,
-  product_length_cm double,
-  product_height_cm double,
-  product_width_cm double
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/products/';
+orders_df = load_data("SELECT COUNT(order_id) as total_orders FROM orders")
+revenue_df = load_data("SELECT ROUND(SUM(price), 2) as total_revenue FROM order_items")
+customers_df = load_data("SELECT COUNT(DISTINCT customer_id) as total_customers FROM customers")
+sellers_df = load_data("SELECT COUNT(DISTINCT seller_id) as total_sellers FROM sellers")
 
--- Sellers
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.sellers (
-  seller_id string,
-  seller_zip_code_prefix string,
-  seller_city string,
-  seller_state string
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/sellers/';
+col1.metric("Total Orders", f"{orders_df['total_orders'][0]:,}")
+col2.metric("Total Revenue", f"R$ {revenue_df['total_revenue'][0]:,.2f}")
+col3.metric("Total Customers", f"{customers_df['total_customers'][0]:,}")
+col4.metric("Total Sellers", f"{sellers_df['total_sellers'][0]:,}")
 
--- Geolocation
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.geolocation (
-  geolocation_zip_code_prefix string,
-  geolocation_lat double,
-  geolocation_lng double,
-  geolocation_city string,
-  geolocation_state string
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/geolocation/';
+# ---- ROW 2 - MONTHLY REVENUE ----
+st.subheader("📈 Monthly Revenue Trend")
+monthly_df = load_data("SELECT * FROM monthly_revenue ORDER BY year_month")
+fig1 = px.line(monthly_df, x="year_month", y="total_revenue",
+               title="Monthly Revenue", markers=True,
+               color_discrete_sequence=["#FF6B35"])
+st.plotly_chart(fig1, use_container_width=True)
 
--- Product Category Translation
-CREATE EXTERNAL TABLE IF NOT EXISTS olist_silver_db.product_category_translation (
-  product_category_name string,
-  product_category_name_english string
-)
-STORED AS PARQUET
-LOCATION 's3://olist-ecommerce-pipeline-john/silver/product_category_translation/';
+# ---- ROW 3 - TWO CHARTS SIDE BY SIDE ----
+col1, col2 = st.columns(2)
 
--- ============================================
--- GOLD LAYER TABLES
--- ============================================
+with col1:
+    st.subheader("🏆 Top 10 Categories by Revenue")
+    cat_df = load_data("SELECT * FROM revenue_by_category ORDER BY total_revenue DESC LIMIT 10")
+    fig2 = px.bar(cat_df, x="total_revenue", y="product_category_name",
+                  orientation="h", color="total_revenue",
+                  color_continuous_scale="Oranges")
+    st.plotly_chart(fig2, use_container_width=True)
 
--- Revenue by Category
-CREATE TABLE olist_silver_db.revenue_by_category
-WITH (
-    format = 'PARQUET',
-    external_location = 's3://olist-ecommerce-pipeline-john/gold/revenue_by_category/'
-)
-AS
-SELECT 
-    p.product_category_name,
-    COUNT(o.order_id) as total_orders,
-    ROUND(SUM(oi.price), 2) as total_revenue
-FROM olist_silver_db.orders o
-JOIN olist_silver_db.order_items oi ON o.order_id = oi.order_id
-JOIN olist_silver_db.products p ON oi.product_id = p.product_id
-GROUP BY p.product_category_name
-ORDER BY total_revenue DESC;
+with col2:
+    st.subheader("💳 Payment Method Breakdown")
+    pay_df = load_data("SELECT * FROM payment_method_breakdown")
+    fig3 = px.pie(pay_df, values="total_orders", names="payment_type",
+                  color_discrete_sequence=px.colors.sequential.Oranges_r)
+    st.plotly_chart(fig3, use_container_width=True)
 
--- Monthly Revenue
-CREATE TABLE olist_silver_db.monthly_revenue
-WITH (
-    format = 'PARQUET',
-    external_location = 's3://olist-ecommerce-pipeline-john/gold/monthly_revenue/'
-)
-AS
-SELECT 
-    SUBSTR(o.order_purchase_timestamp, 1, 7) as year_month,
-    COUNT(o.order_id) as total_orders,
-    ROUND(SUM(oi.price), 2) as total_revenue
-FROM olist_silver_db.orders o
-JOIN olist_silver_db.order_items oi ON o.order_id = oi.order_id
-WHERE o.order_status = 'delivered'
-GROUP BY SUBSTR(o.order_purchase_timestamp, 1, 7)
-ORDER BY year_month ASC;
+# ---- ROW 4 - DELIVERY TIME ----
+st.subheader("🚚 Average Delivery Time by State")
+delivery_df = load_data("SELECT * FROM avg_delivery_time_by_state ORDER BY avg_delivery_days")
+fig4 = px.bar(delivery_df, x="customer_state", y="avg_delivery_days",
+              color="avg_delivery_days", color_continuous_scale="RdYlGn_r",
+              title="Average Delivery Days by State")
+st.plotly_chart(fig4, use_container_width=True)
 
--- Average Delivery Time by State
-CREATE TABLE olist_silver_db.avg_delivery_time_by_state
-WITH (
-    format = 'PARQUET',
-    external_location = 's3://olist-ecommerce-pipeline-john/gold/avg_delivery_time_by_state/'
-)
-AS
-SELECT 
-    c.customer_state,
-    COUNT(o.order_id) as total_orders,
-    ROUND(AVG(
-        DATE_DIFF('day', 
-            DATE_PARSE(o.order_purchase_timestamp, '%Y-%m-%d %H:%i:%s'),
-            DATE_PARSE(o.order_delivered_customer_date, '%Y-%m-%d %H:%i:%s')
-        )
-    ), 1) as avg_delivery_days
-FROM olist_silver_db.orders o
-JOIN olist_silver_db.customers c ON o.customer_id = c.customer_id
-WHERE o.order_status = 'delivered'
-AND o.order_delivered_customer_date != ''
-AND o.order_purchase_timestamp != ''
-GROUP BY c.customer_state
-ORDER BY avg_delivery_days ASC;
-
--- Payment Method Breakdown
-CREATE TABLE olist_silver_db.payment_method_breakdown
-WITH (
-    format = 'PARQUET',
-    external_location = 's3://olist-ecommerce-pipeline-john/gold/payment_method_breakdown/'
-)
-AS
-SELECT 
-    payment_type,
-    COUNT(order_id) as total_orders,
-    ROUND(SUM(payment_value), 2) as total_value,
-    ROUND(AVG(CAST(payment_installments AS double)), 1) as avg_installments
-FROM olist_silver_db.order_payments
-GROUP BY payment_type
-ORDER BY total_orders DESC;
-
--- Top Sellers by Revenue
-CREATE TABLE olist_silver_db.top_sellers_by_revenue
-WITH (
-    format = 'PARQUET',
-    external_location = 's3://olist-ecommerce-pipeline-john/gold/top_sellers_by_revenue/'
-)
-AS
-SELECT 
-    s.seller_id,
-    s.seller_city,
-    s.seller_state,
-    COUNT(oi.order_id) as total_orders,
-    ROUND(SUM(oi.price), 2) as total_revenue
-FROM olist_silver_db.order_items oi
-JOIN olist_silver_db.sellers s ON oi.seller_id = s.seller_id
-GROUP BY s.seller_id, s.seller_city, s.seller_state
-ORDER BY total_revenue DESC;
+st.markdown("---")
+st.markdown("Built by John | AWS S3 + Glue + Athena + Streamlit")
