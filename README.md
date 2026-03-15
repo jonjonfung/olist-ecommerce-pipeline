@@ -3,6 +3,9 @@
 ## 🌐 Live Dashboard
 👉 [View Live Dashboard](your_streamlit_url_here)
 
+
+![Image](https://github.com/user-attachments/assets/7a1e535d-2af4-4af5-8d14-156c771d8825)
+
 An end-to-end data engineering pipeline built on AWS using the Brazilian E-Commerce dataset from Kaggle.
 
 ## 🏗️ Architecture
