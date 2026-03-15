@@ -3,6 +3,29 @@ import pandas as pd
 import plotly.express as px
 import awswrangler as wr
 import os
+import streamlit as st
+import boto3
+import os
+
+# Load AWS credentials from Streamlit secrets
+os.environ["AWS_ACCESS_KEY_ID"] = st.secrets["AWS_ACCESS_KEY_ID"]
+os.environ["AWS_SECRET_ACCESS_KEY"] = st.secrets["AWS_SECRET_ACCESS_KEY"]
+os.environ["AWS_DEFAULT_REGION"] = "ap-southeast-2"
+```
+
+4. Commit changes
+
+## Step 2 — Deploy to Streamlit Cloud
+1. Go to **streamlit.io/cloud**
+2. Sign in with your **GitHub account**
+3. Click **"New app"**
+4. Select your repo **`olist-ecommerce-pipeline`**
+5. Set main file path to **`dashboard/dashboard.py`**
+6. Click **"Advanced settings"**
+7. Add your secrets:
+```
+AWS_ACCESS_KEY_ID = "your_access_key"
+AWS_SECRET_ACCESS_KEY = "your_secret_key"
 
 # AWS config
 os.environ["AWS_DEFAULT_REGION"] = "ap-southeast-2"
